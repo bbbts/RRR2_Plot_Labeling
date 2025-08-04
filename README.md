@@ -1,113 +1,123 @@
-# 🏷️ Drone Image Plot Labeling using GPS EXIF Metadata
+# 🛰️ Drone Image Plot Labeling using EXIF GPS and Plot GeoJSON
 
-This repository contains tools to automatically **label drone-captured RGB and thermal images** with the correct **plot number** based on GPS coordinates embedded in the image EXIF data.
+This repository provides a Python tool for **automatically labeling drone-captured images** based on their **GPS coordinates** and **field plot geometries**.
 
-## 🎯 Objective
-
-When capturing aerial images over field plots using a drone, each image has associated **GPS EXIF metadata** (latitude, longitude, altitude). These images are taken over agricultural **plots**, each with known boundaries and plot numbers.
-
-The goal is to:
-- **Read GPS info** from image EXIF metadata.
-- **Compare location** to a geo-referenced `.geojson` file of the field plots.
-- **Determine** which plot the image is closest to or overlaps with.
-- **Rename the image** by prefixing it with the corresponding plot number.
-
-For example:
-```
-Original image: IMG_00123.JPG
-If closest to Plot 1 → Renamed to: 1_IMG_00123.JPG
-```
+Images are renamed using the **nearest plot number** derived from a `.geojson` file, enabling downstream analysis of spatially-tagged imagery and plot-level data alignment.
 
 ---
 
-## 📦 Repository Features
+## 📌 What It Does
 
-- Reads **GPS coordinates** from EXIF metadata using `exifread` or `Pillow`.
-- Parses **GeoJSON shapefiles** to extract plot boundaries.
-- Uses spatial distance metrics (e.g., centroids, bounding boxes) to match images to the **nearest plot**.
-- Handles **incomplete plot sets** (e.g., skips plots 14 and 18).
-- Supports **batch processing** of an entire image folder.
+- Reads **GPS coordinates** from drone image EXIF metadata.
+- Loads **plot geometry boundaries** from a `.geojson` file.
+- Determines the closest plot to each image location using spatial distance.
+- Renames each image by **prefixing it with the correct plot number** (e.g., `3_IMG_0045.JPG`).
+- Optionally generates a **visual interactive map (HTML)** showing:
+  - Plot boundaries
+  - Image positions
+  - Image-to-plot associations
 
 ---
 
-## 📂 Folder Structure
+## 📂 Example Folder Structure
 
-```plaintext
-/Plot_Labeling_Repo/
-├── scripts/
-│   └── label_images_by_gps.py     # Main labeling script
-├── geo/
-│   └── field_plots.geojson        # Plot geometry and IDs
-├── raw_images/
-│   └── IMG_00123.JPG              # Original drone images
-├── labeled_images/
-│   └── 1_IMG_00123.JPG            # Renamed based on plot match
-└── README.md
+```
+/Plot_Labeling/
+├── 2025-05-29_Transect/
+│   └── Transect/
+│       ├── IMG_0001.JPG
+│       ├── IMG_0002.JPG
+├── RRR2_ALLCOMPONENTS_ANDRADE_plots_20240809.geojson
+├── label_by_gps.py
+└── Plot_labeling_NEW/
+    ├── 2025-05-29_Renamed/
+    │   ├── 3_IMG_0001.JPG
+    │   ├── 5_IMG_0002.JPG
+    │   └── ...
+    └── 2025-05-29_interactive_map.html
 ```
 
 ---
 
 ## 🧭 How It Works
 
-1. For each image in the `raw_images/` folder:
-   - Extracts **latitude/longitude** from EXIF metadata.
-2. Loads the **plot boundaries** from the provided `.geojson` file.
-3. Uses spatial logic to determine which plot polygon the image is closest to (or intersects with).
-4. Renames the image with the matching plot number:
-   - `IMG_123.JPG` → `5_IMG_123.JPG` (if matched to Plot 5)
-5. Saves the renamed image to `labeled_images/`.
+1. For each `.JPG` in the input folder:
+   - Extracts `GPSLatitude`, `GPSLongitude`, and direction info from EXIF metadata.
+2. Loads `.geojson` file containing plot polygons and `Plot_No` field.
+3. Computes the **closest plot polygon** to each image point using `shapely`.
+4. Renames image with the format:  
+   ```
+   {Plot_No}_{OriginalFileName}.JPG
+   ```
+5. Copies the renamed image to the output folder.
+6. Generates a **Folium-based interactive map** with:
+   - Plots shown in color.
+   - Images marked as dots.
+   - Plot-specific popup windows listing matched images.
 
 ---
 
-## 🧪 Example Use Case
+## 💻 How to Run
 
 ```bash
-python scripts/label_images_by_gps.py \
-  --input_dir raw_images/ \
-  --geojson geo/field_plots.geojson \
-  --output_dir labeled_images/
+python label_by_gps.py
+```
+
+Make sure to configure the paths in the script:
+
+```python
+input_folder = '/path/to/drone/images/'
+geojson_path = '/path/to/plots.geojson'
+output_folder = '/path/to/output_folder/'
 ```
 
 ---
 
-## ✅ Requirements
+## 🔍 Dependencies
 
-Install Python dependencies:
+Install required packages:
 
 ```bash
-pip install pillow shapely geopandas exifread
+pip install geopandas shapely folium pillow piexif matplotlib
 ```
 
-Optional: use `pyproj` if projections or coordinate system handling is needed.
+---
+
+## 🖼️ Output Files
+
+- Renamed images saved to:  
+  `Plot_labeling_NEW/2025-05-29_Renamed/`
+
+- Interactive HTML map:  
+  `Plot_labeling_NEW/2025-05-29_interactive_map.html`
+
+This map shows which images correspond to which plots and helps verify spatial labeling.
 
 ---
 
-## 💡 Notes
+## ⚠️ Notes
 
-- Only one image per plot is **not required** — multiple images for the same plot are supported.
-- Works best when images are taken **close to nadir (straight down)** for better spatial matching.
-- You can modify the script to skip specific plots or apply confidence thresholds on GPS accuracy.
-- Make sure `.geojson` polygons are in the same coordinate system as GPS (usually WGS84 / EPSG:4326).
-
----
-
-## 📍 EXIF Metadata & Matching Logic
-
-Images contain GPS data like:
-
-```
-GPSLatitude: 36° 6' 33.43"
-GPSLongitude: -115° 9' 58.10"
-```
-
-These are converted to decimal degrees and matched against the centroid or bounding box of each plot polygon.
+- Skips images with **missing or incomplete EXIF GPS data**.
+- The geojson file must contain a field named `Plot_No`.
+- Multiple images per plot are allowed.
+- The folder date (e.g., `2025-05-29`) is used to timestamp outputs.
+- Uses `shapely.distance()` for nearest-plot logic (not just bounding box overlap).
 
 ---
 
-## 📬 Contact & Contributions
+## 📌 Why This Matters
 
-Feel free to open an issue or pull request if you'd like to contribute improvements or report bugs.
+Labeling drone images by plot helps:
+- Connect field-level measurements with aerial imagery.
+- Enable plot-wise segmentation and annotation.
+- Prepare datasets for training ML or computer vision models.
 
 ---
 
-🛰️ *This repo bridges raw drone data with structured field experiments by making each image location-aware.*
+## 🙌 Acknowledgments
+
+Thanks to open-source packages like `folium`, `geopandas`, and `piexif` for enabling this spatial image labeling tool.
+
+---
+
+*Built for research automation and reproducibility in agricultural field trials and UAV-based phenotyping.*
