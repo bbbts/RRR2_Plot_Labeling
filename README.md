@@ -1,6 +1,6 @@
 # 🏷️ Drone Image Plot Labeling using GPS EXIF Metadata
 
-This repository contains tools to automatically **label drone-captured RGB images** with the correct **plot number** based on GPS coordinates embedded in the image EXIF data.
+This repository contains tools to automatically **label drone-captured RGB and thermal images** with the correct **plot number** based on GPS coordinates embedded in the image EXIF data.
 
 ## 🎯 Objective
 
